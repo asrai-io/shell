@@ -13,3 +13,4 @@
   - Option to view constructed command
     - e.g. docker container exec -it image /bin/sh ...
   - Allow local command extensions from current folder
+  - If a command is not found, perform a git pull on the repo
