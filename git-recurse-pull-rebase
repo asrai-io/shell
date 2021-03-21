@@ -1,0 +1,14 @@
+#!/bin/sh
+
+if [ "$1"x == "x" ]; then
+  echo usage: $0 directory
+  exit
+fi
+
+if [ ! -d $1 ]; then
+  echo ERROR: directory $1 not found
+  exit
+fi
+
+find $1 -name .git 2>&1 | grep -v "not permitted" | awk '{split($0,v,".git"); print v[1]}' | xargs -I % sh -c 'echo updating % && cd % && git pull --rebase && echo'
+

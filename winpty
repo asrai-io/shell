@@ -1,0 +1,8 @@
+#!/bin/sh
+
+if [ $OS == "Windows_NT" ];then
+    winpty "$@"
+    exit 0
+fi
+
+"$@"

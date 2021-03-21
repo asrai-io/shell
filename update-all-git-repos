@@ -1,0 +1,7 @@
+#!/bin/sh
+
+cd $HOME
+echo $(date) >> $0.log
+./scripts/git-recurse-pull-rebase $PWD >> $HOME/$0.log
+
+

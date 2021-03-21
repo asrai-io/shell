@@ -1,0 +1,1 @@
+"D:\Apps\Microsoft Visual Studio\2019\Professional\Common7\IDE\devenv.exe" %*

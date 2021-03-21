@@ -1,0 +1,228 @@
+#!/bin/sh
+
+# TODO
+# generate appsettings files for proxies
+# adjust production website urls (perhaps)
+
+set -e
+
+function create_web_site_script() {
+
+    if [ -z "$app_sub_domain" ]; then
+        echo ERROR app_sub_domain not set
+        exit 1
+    fi
+    
+    if [ -z "$app_domain" ]; then
+        echo ERROR app_domain not set
+        exit 1
+    fi
+
+    if ! [ -e $iis_setup_script ]; then
+        echo "- creating iis site setup script: $iis_setup_script"
+    else
+        echo "- appending to iis site setup script: $iis_setup_script"
+    fi
+
+    if [ -z "$solution_env_host_ip" ]; then
+        export solution_env_host_ip="127.0.0.1"
+        echo "  (solution_env_host_ip not set, using $solution_env_host_ip)"
+    fi
+
+    if [ -z "$module_app_pool_identity" ]; then
+        export module_app_pool_identity="LocalSystem"
+        echo $module_name: module_app_pool_identity not set, using $module_app_pool_identity
+    fi
+
+    export webapp_site_name=$app_env-$module_name.$app_domain
+    export webapp_host_name=$app_sub_domain.$app_domain
+    export webapp_physical_path=$solution_iis_physical_path_root/$module_name
+    export webapp_physical_path_dos=$solution_iis_physical_path_root_dos\\$module_name
+
+    export webapp_site_bindings=$webapp_host_name
+
+    echo $app_cmd delete site $webapp_site_name >> $iis_setup_script
+    echo $app_cmd delete apppool $webapp_site_name >> $iis_setup_script
+
+    echo $app_cmd add apppool /name:"$webapp_site_name" /managedRuntimeVersion:"" -processModel.identityType:$module_app_pool_identity >> $iis_setup_script
+    echo $app_cmd add site /name:"$webapp_site_name" /site.name:"$webapp_site_name" /bindings:"http://$webapp_site_bindings:80" /physicalPath:"$webapp_physical_path_dos" >> $iis_setup_script
+    # echo $app_cmd add site /name:"$webapp_site_name" /site.name:"$webapp_site_name" /+bindings.[protocol="https",bindinginformation="*443$webapp_site_bindings"] >> $iis_setup_script
+    echo $app_cmd set app "$webapp_site_name/" /applicationPool:"$webapp_site_name" >> $iis_setup_script
+    echo $app_cmd start apppool /apppool.name:"$webapp_site_name" >> $iis_setup_script
+    echo '' >> $iis_setup_script
+}
+
+function create_hosts_section() {
+
+    if ! [ -e $hosts_file ]; then
+        echo "- creating hosts file section: $hosts_file"
+        echo "# ++++ Application: $app_name, Environment: $app_env ++++" > $hosts_file
+        echo "" >> $hosts_file
+    else
+        echo "- appending to hosts file section: $hosts_file"
+    fi
+
+    echo "# Module:             $module_name ($app_env)" >> $hosts_file
+    echo "# Site name:          $webapp_site_name" >> $hosts_file
+    echo "# Application pool:   $webapp_site_name" >> $hosts_file
+    echo "# Physical path:      $webapp_physical_path" >> $hosts_file
+    echo "# Host name:          $webapp_host_name" >> $hosts_file
+    echo "$solution_env_host_ip $webapp_host_name" >> $hosts_file
+
+    echo '' >> $hosts_file
+}
+
+function create_deployment_script() {
+
+    if ! [ -e $iis_deploy_script ]; then
+        echo "- creating deployment script: $iis_deploy_script"
+        echo "#!/bin/sh" >> $iis_deploy_script
+        echo '' >> $iis_deploy_script
+        echo "set -e" >> $iis_deploy_script
+        echo '' >> $iis_deploy_script
+    else
+        echo "- appending to deployment script: $iis_deploy_script"
+    fi
+
+    if [ -e "$module_name/$module_name.csproj" ]; then
+        echo "- creating build/deployment for .net core project"
+        build_cmd="dotnet publish"
+        artifacts_folder="bin/Debug/netcoreapp3.1/publish"
+    elif [ -e "$module_name/package.json" ]; then
+        echo "- creating build/deployment for yarn project"
+        build_cmd="yarn build"
+        artifacts_folder="build"
+    else
+        echo "ERROR - unable to determine module type"
+        exit 1
+    fi
+
+    echo "pushd $module_name" >> $iis_deploy_script
+    echo $build_cmd >> $iis_deploy_script
+    echo "mkdir -p $webapp_physical_path" >> $iis_deploy_script
+    echo "rm -rf $webapp_physical_path/*" >> $iis_deploy_script
+    echo "cp -R $artifacts_folder/* $webapp_physical_path" >> $iis_deploy_script
+    echo "popd" >> $iis_deploy_script
+
+    echo '' >> $iis_deploy_script
+}
+
+function show_usage() {
+    echo USAGE: "$0 clean/create app_name module_name (optional) app_sub_domain"
+}
+
+# Entry point
+
+if [ -z "$1" ]; then
+    echo USAGE: "$0 clean/create app_name module_name"
+    echo $0 ERROR: app_name not set
+    exit 1
+fi
+
+export mode=
+
+if [ $1 = "clean" ]; then
+    export mode=clean
+fi
+
+if [ $1 = "create" ]; then
+    export mode=create
+fi
+
+if [ -z "$app_env" ]; then
+    export app_env=$ASPNETCORE_ENVIRONMENT
+    echo "(app_env not set, using ASPNETCORE_ENVIRONMENT: $ASPNETCORE_ENVIRONMENT)"
+fi
+
+export iis_setup_script=./scripts/iis-setup-$app_env.bat
+export solution_iis_physical_path_root_dos=$SYSTEMDRIVE\\inetpub\\$app_env-$app_name.$app_domain
+export solution_iis_physical_path_root=/C/inetpub/$app_env-$app_name.$app_domain
+export iis_deploy_script=./scripts/iis-deploy-$app_env
+mkdir -p ./scripts/hosts
+export hosts_file=./scripts/hosts/hosts_$app_env
+
+if [ $mode == "clean" ]; then
+    echo "cleaning $app_env scripts..."
+    rm -f $iis_setup_script
+    rm -f $iis_deploy_script
+    rm -f $hosts_file
+    exit 0
+fi
+
+if [ -z $mode ]; then
+    echo $0 ERROR: unknown mode: $1
+    show_usage
+    exit 1
+fi
+
+if [ -z "$2" ]; then
+    echo $0 ERROR: app_name not set
+    show_usage
+    exit 1
+fi
+
+if [ -z "$3" ]; then
+    echo $0 ERROR: module_name not set
+    show_usage
+    exit 1
+fi
+
+export app_name=$2
+export module_name=$3
+
+if [ -z "$4" ]; then
+    export app_sub_domain=$app_env-$module_name
+    echo "  (app_sub_domain not set, using module_name: $app_sub_domain)"
+else
+    export app_sub_domain=$app_env-$4
+fi
+
+echo Application: $app_name - generating scripts for module: $module_name in environment: $app_env
+
+if [ -z "$iis_setup_script" ]; then
+    echo $0 ERROR: iis_setup_script not set
+    exit 1
+fi
+
+if [ -z "$hosts_file" ]; then
+    echo $0 ERROR: hosts_file not set
+    exit 1
+fi
+
+if [ -z "$iis_deploy_script" ]; then
+    echo $0 ERROR: iis_deploy_script not set
+    exit 1
+fi
+
+if [ -z "$module_name" ]; then
+    echo $0 ERROR: module_name not set
+    exit 1
+fi
+
+if [ -z "$app_domain" ]; then
+    echo $0 ERROR: app_domain not set
+    exit 1
+fi
+
+if [ -z "$app_env" ]; then
+    echo $0 ERROR: app_env not set
+    exit 1
+fi
+
+if [ -z "$solution_iis_physical_path_root" ]; then
+    echo $0 ERROR: solution_iis_physical_path_root not set
+    exit 1
+fi
+
+if [ -z "$module_name" ]; then
+    echo $0 ERROR: module_name not set
+    exit 1
+fi
+
+export app_cmd=$WINDIR\\system32\\inetsrv\\appcmd.exe
+
+create_web_site_script
+create_deployment_script
+create_hosts_section
+
+echo ""

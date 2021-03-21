@@ -1,0 +1,6 @@
+#!/bin/sh
+
+curl -sL https://dotnet.microsoft.com/download/dotnet-core/scripts/v1/dotnet-install.sh  > /tmp/dotnet-install.sh
+bash /tmp/dotnet-install.sh
+
+dotnet --version
