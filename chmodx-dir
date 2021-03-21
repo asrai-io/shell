@@ -11,4 +11,4 @@ if [ ! -d $1 ]; then
 fi
 
 
-find $1 -type f -print0 | xargs -0 dos2unix
+find $1 -type f -print0 | xargs -0 chmod +x
