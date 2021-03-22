@@ -1,0 +1,3 @@
+#!/bin/bash
+docker-purge-containers
+docker-purge-images
