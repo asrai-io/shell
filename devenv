@@ -1,2 +1,15 @@
 #!/bin/sh
-"/D/Apps/Microsoft Visual Studio/2019/Professional/Common7/IDE/devenv.exe" $*
+
+c_devenv="/C/Program Files (x86)/Microsoft Visual Studio/2019/Community/Common7/IDE/devenv.exe"
+d_devenv="/D/Apps/Microsoft Visual Studio/2019/Professional/Common7/IDE/devenv.exe"
+
+# echo $c_devenv
+# echo $d_devenv
+
+if [[ -f $c_devenv ]]; then
+    "$c_devenv" $*
+elif [[ -f $d_devenv ]]; then
+    "$d_devenv" $*
+else
+    echo "can't find devenv.exe"
+fi
